@@ -1,12 +1,13 @@
-import amqp, { type Connection } from "amqplib";
+import amqp from "amqplib";
 import { publishJSON } from "../internal/pubsub/publish.js";
-import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
+import { ExchangePerilDirect, ExchangePerilTopic, GameLogSlug, PauseKey } from "../internal/routing/routing.js";
 import type { PlayingState } from "../internal/gamelogic/gamestate.js";
 import { getInput, printServerHelp } from "../internal/gamelogic/gamelogic.js";
+import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
 
 async function main() {
 
-  process.on('SIGINT', ()=> {
+  process.on('SIGINT', () => {
     conn.close()
     console.log("Exiting program")
   })
@@ -16,34 +17,40 @@ async function main() {
   const conn = await amqp.connect(rabbitConnString);
   console.log("Successfully connected to RabbitMQ")
 
+  const exchange = ExchangePerilTopic;
+  const queueName = GameLogSlug;
+  const routingKey = "game_logs.*";
+  const queueType = SimpleQueueType.Durable;
+
+  const [channel, queue] = await declareAndBind(conn, exchange, queueName, routingKey, queueType);
+
   printServerHelp();
 
-  while(true){
+  while (true) {
     const input = await getInput();
-    if(!input.length)
+    if (!input.length)
       continue;
 
-    if(input[0] === "pause")
-    {
+    if (input[0] === "pause") {
       console.log("Sending a pause message!");
       publishPauseMessage(conn, true);
-    }else if(input[0] === "resume"){
+    } else if (input[0] === "resume") {
       console.log("Sending a resume message!");
       publishPauseMessage(conn, false);
-    }else if( input [0]=== "quit"){
+    } else if (input[0] === "quit") {
       console.log("Exiting program")
       break;
-    }else{
+    } else {
       console.log("Unknown command!");
     }
   }
 }
 
-async function publishPauseMessage(conn: amqp.ChannelModel, isPaused: boolean){
+async function publishPauseMessage(conn: amqp.ChannelModel, isPaused: boolean) {
   const channel = await conn.createConfirmChannel();
   const exchange = ExchangePerilDirect;
   const routingKey = PauseKey;
-  const gameState:PlayingState = {isPaused: isPaused};
+  const gameState: PlayingState = { isPaused: isPaused };
 
   publishJSON(channel, exchange, routingKey, gameState);
 }
