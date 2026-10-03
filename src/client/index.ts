@@ -1,22 +1,64 @@
 import amqp from "amqplib";
-import { clientWelcome } from "../internal/gamelogic/gamelogic.js";
+import { clientWelcome, commandStatus, getInput, printClientHelp, printQuit } from "../internal/gamelogic/gamelogic.js";
 import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
 import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
+import { GameState } from "../internal/gamelogic/gamestate.js";
+import { commandSpawn } from "../internal/gamelogic/spawn.js";
+import { commandMove } from "../internal/gamelogic/move.js";
+import type { ArmyMove } from "../internal/gamelogic/gamedata.js";
+import { exit } from "process";
 
 async function main() {
   console.log("Starting Peril client...");
   const rabbitConnString = "amqp://guest:guest@localhost:5672/";
   const conn = await amqp.connect(rabbitConnString);
   console.log("Successfully connected to RabbitMQ")
-  
+
   const username = await clientWelcome();
-  
+
   const exchange = ExchangePerilDirect;
   const queueName = `${PauseKey}.${username}`;
   const routingKey = PauseKey;
   const queueType = SimpleQueueType.Transient;
 
   const [channel, queue] = await declareAndBind(conn, exchange, queueName, routingKey, queueType);
+
+  const gameState: GameState = new GameState(username);
+
+  while (true) {
+    const input = await getInput();
+    if (!input.length)
+      continue;
+
+    if (input[0] === "spawn") {
+      runFunction(gameState, input, commandSpawn)
+    } else if (input[0] === "move") {
+      const armyMove: ArmyMove = runFunction(gameState, input, commandMove);
+      console.log("Moving done!")
+    } else if (input[0] === "status") {
+      await commandStatus(gameState);
+    } else if (input[0] === "help") {
+      printClientHelp();
+    } else if (input[0] === "spam") {
+      console.log("Spamming not allowed yet!");
+    } else if (input[0] === "quit") {
+      printQuit()
+      process.exit(0);
+    } else {
+      console.log("unknown command!");
+    }
+  }
+}
+
+function runFunction(gameState: GameState, input: string[], operation: (gameState: GameState, input: string[]) => any) {
+  try {
+    return operation(gameState, input);
+  } catch (e) {
+    if (e instanceof Error)
+      console.log(e.message);
+    else
+      console.log(`an Error is encountered ${e}`);
+  }
 }
 
 main().catch((err) => {
