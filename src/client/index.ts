@@ -1,12 +1,12 @@
 import amqp from "amqplib";
 import { clientWelcome, commandStatus, getInput, printClientHelp, printQuit } from "../internal/gamelogic/gamelogic.js";
-import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
+import { declareAndBind, SimpleQueueType, subscribeJSON } from "../internal/pubsub/consume.js";
 import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
 import { GameState } from "../internal/gamelogic/gamestate.js";
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import { commandMove } from "../internal/gamelogic/move.js";
 import type { ArmyMove } from "../internal/gamelogic/gamedata.js";
-import { exit } from "process";
+import { handlerPause } from "./handlers/handlerPause.js";
 
 async function main() {
   console.log("Starting Peril client...");
@@ -24,6 +24,7 @@ async function main() {
   const [channel, queue] = await declareAndBind(conn, exchange, queueName, routingKey, queueType);
 
   const gameState: GameState = new GameState(username);
+  subscribeJSON(conn, exchange, queueName, routingKey, queueType, handlerPause(gameState));
 
   while (true) {
     const input = await getInput();
@@ -34,7 +35,6 @@ async function main() {
       runFunction(gameState, input, commandSpawn)
     } else if (input[0] === "move") {
       const armyMove: ArmyMove = runFunction(gameState, input, commandMove);
-      console.log("Moving done!")
     } else if (input[0] === "status") {
       await commandStatus(gameState);
     } else if (input[0] === "help") {
