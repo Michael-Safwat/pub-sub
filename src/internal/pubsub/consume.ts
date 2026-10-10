@@ -13,7 +13,18 @@ export async function declareAndBind(
   const autoDelete = queueType === SimpleQueueType.Transient ? true : false;
   const exclusive = queueType === SimpleQueueType.Transient ? true : false;
 
-  const queue = await channel.assertQueue(queueName, { durable: durable, autoDelete: autoDelete, exclusive: exclusive });
+  const queueArguments: Record<string, any> = {
+    'x-dead-letter-exchange': 'peril_dlx',
+  };
+
+  const queue = await channel.assertQueue(queueName,
+    {
+      durable: durable,
+      autoDelete: autoDelete,
+      exclusive: exclusive,
+      arguments: { "x-dead-letter-exchange": "peril_dlx", }
+    });
+    
   channel.bindQueue(queue.queue, exchange, key);
   return [channel, queue]
 }
@@ -24,7 +35,7 @@ export async function subscribeJSON<T>(
   queueName: string,
   key: string,
   queueType: SimpleQueueType,
-  handler: (data: T) => void,
+  handler: (data: T) => AckType,
 ): Promise<void> {
   const [channel, queue] = await declareAndBind(conn, exchange, queueName, key, queueType);
   channel.consume(queue.queue, (msg: amqp.ConsumeMessage | null) => {
@@ -32,14 +43,30 @@ export async function subscribeJSON<T>(
       return
     const msgContent = JSON.parse(String(msg.content));
     console.log("received a message");
-    handler(msgContent);
-    channel.ack(msg);
-    
+    const ackType = handler(msgContent);
+
+    if (ackType === AckType.Ack) {
+      channel.ack(msg);
+      console.log("Ack message!");
+    }
+    else if (ackType === AckType.NackDiscard) {
+      channel.nack(msg, false, false);
+      console.log("Nack discard message!");
+    }
+    else {
+      channel.nack(msg, false, true);
+      console.log("Nack requeue message!");
+    }
   });
 }
-
 
 export enum SimpleQueueType {
   Durable,
   Transient,
+}
+
+export enum AckType {
+  Ack,
+  NackRequeue,
+  NackDiscard
 }
