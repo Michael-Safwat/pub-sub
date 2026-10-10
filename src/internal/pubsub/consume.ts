@@ -24,7 +24,7 @@ export async function declareAndBind(
       exclusive: exclusive,
       arguments: { "x-dead-letter-exchange": "peril_dlx", }
     });
-    
+
   channel.bindQueue(queue.queue, exchange, key);
   return [channel, queue]
 }
@@ -35,15 +35,15 @@ export async function subscribeJSON<T>(
   queueName: string,
   key: string,
   queueType: SimpleQueueType,
-  handler: (data: T) => AckType,
+  handler: (data: T) => Promise<AckType> | AckType,
 ): Promise<void> {
   const [channel, queue] = await declareAndBind(conn, exchange, queueName, key, queueType);
-  channel.consume(queue.queue, (msg: amqp.ConsumeMessage | null) => {
+  await channel.consume(queue.queue, async (msg: amqp.ConsumeMessage | null) => {
     if (!msg)
       return
     const msgContent = JSON.parse(String(msg.content));
     console.log("received a message");
-    const ackType = handler(msgContent);
+    const ackType = await handler(msgContent);
 
     if (ackType === AckType.Ack) {
       channel.ack(msg);
