@@ -3,7 +3,8 @@ import { publishJSON } from "../internal/pubsub/publish.js";
 import { ExchangePerilDirect, ExchangePerilTopic, GameLogSlug, PauseKey } from "../internal/routing/routing.js";
 import type { PlayingState } from "../internal/gamelogic/gamestate.js";
 import { getInput, printServerHelp } from "../internal/gamelogic/gamelogic.js";
-import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
+import { SimpleQueueType, subscribeMsgPack } from "../internal/pubsub/consume.js";
+import { handlerLog } from "../client/handlers/handlerLog.js";
 
 async function main() {
 
@@ -17,12 +18,14 @@ async function main() {
   const conn = await amqp.connect(rabbitConnString);
   console.log("Successfully connected to RabbitMQ")
 
-  const exchange = ExchangePerilTopic;
-  const queueName = GameLogSlug;
-  const routingKey = "game_logs.*";
-  const queueType = SimpleQueueType.Durable;
-
-  const [channel, queue] = await declareAndBind(conn, exchange, queueName, routingKey, queueType);
+  subscribeMsgPack(
+    conn,
+    ExchangePerilTopic,
+    GameLogSlug,
+    `${GameLogSlug}.*`,
+    SimpleQueueType.Durable,
+    handlerLog(),
+  );
 
   printServerHelp();
 

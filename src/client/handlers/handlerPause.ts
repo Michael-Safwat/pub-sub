@@ -7,7 +7,7 @@ export function handlerPause(gs: GameState): (ps: PlayingState) => AckType{
             gs.pauseGame()
         else
             gs.resumeGame()
-        console.log("> ");
+        process.stdout.write("> ");
 
         return AckType.Ack
     }

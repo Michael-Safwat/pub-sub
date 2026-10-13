@@ -1,15 +1,16 @@
-import amqp from "amqplib";
+import amqp, { type ConfirmChannel } from "amqplib";
 import { clientWelcome, commandStatus, getInput, printClientHelp, printQuit } from "../internal/gamelogic/gamelogic.js";
-import { declareAndBind, SimpleQueueType, subscribeJSON } from "../internal/pubsub/consume.js";
-import { ArmyMovesPrefix, ExchangePerilDirect, ExchangePerilTopic, PauseKey, WarRecognitionsPrefix } from "../internal/routing/routing.js";
+import { SimpleQueueType, subscribeJSON } from "../internal/pubsub/consume.js";
+import { ArmyMovesPrefix, ExchangePerilDirect, ExchangePerilTopic, GameLogSlug, PauseKey, WarRecognitionsPrefix } from "../internal/routing/routing.js";
 import { GameState } from "../internal/gamelogic/gamestate.js";
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import { commandMove } from "../internal/gamelogic/move.js";
 import type { ArmyMove } from "../internal/gamelogic/gamedata.js";
 import { handlerPause } from "./handlers/handlerPause.js";
 import { handlerMove } from "./handlers/handlerMove.js";
-import { publishJSON } from "../internal/pubsub/publish.js";
+import { publishJSON, publishMsgPack } from "../internal/pubsub/publish.js";
 import { handlerWar } from "./handlers/handlerWar.js";
+import type { GameLog } from "../internal/gamelogic/logs.js";
 
 async function main() {
   console.log("Starting Peril client...");
@@ -39,7 +40,7 @@ async function main() {
 
   subscribeJSON(conn, exchange, queueName, routingKey, queueType, handlerPause(gameState));
   subscribeJSON(conn, perilTopicExchange, armyMovesQueue, armyMovesRoutingKey, SimpleQueueType.Transient, handlerMove(gameState, channel));
-  subscribeJSON(conn, perilTopicExchange, warQueueName, warRoutingKey, warQueueType, handlerWar(gameState));
+  subscribeJSON(conn, perilTopicExchange, warQueueName, warRoutingKey, warQueueType, handlerWar(channel, gameState));
 
   while (true) {
     const input = await getInput();
@@ -81,6 +82,12 @@ function runFunction(gameState: GameState, input: string[], operation: (gameStat
     else
       console.log(`an Error is encountered ${e}`);
   }
+}
+
+export function publishGameLog(ch: ConfirmChannel, username: string, msg: string) {
+  const currentTime: Date = new Date();
+  const gameLog: GameLog = { username: username, message: msg, currentTime: currentTime };
+  publishMsgPack(ch, ExchangePerilTopic, `${GameLogSlug}.${username}`, gameLog);
 }
 
 main().catch((err) => {
