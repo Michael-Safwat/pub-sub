@@ -1,5 +1,5 @@
 import amqp, { type ConfirmChannel } from "amqplib";
-import { clientWelcome, commandStatus, getInput, printClientHelp, printQuit } from "../internal/gamelogic/gamelogic.js";
+import { clientWelcome, commandStatus, getInput, getMaliciousLog, printClientHelp, printQuit } from "../internal/gamelogic/gamelogic.js";
 import { SimpleQueueType, subscribeJSON } from "../internal/pubsub/consume.js";
 import { ArmyMovesPrefix, ExchangePerilDirect, ExchangePerilTopic, GameLogSlug, PauseKey, WarRecognitionsPrefix } from "../internal/routing/routing.js";
 import { GameState } from "../internal/gamelogic/gamestate.js";
@@ -63,7 +63,24 @@ async function main() {
     } else if (input[0] === "help") {
       printClientHelp();
     } else if (input[0] === "spam") {
-      console.log("Spamming not allowed yet!");
+      if (input.length < 2) {
+        console.log("usage: spam <number>")
+        continue;
+      }
+      if(!input[1]) 
+      {
+        console.log("usage: spam <number>");
+        continue;
+      }
+      const num = parseInt(input[1], 10)
+      if (isNaN(num)) {
+        console.log(`error: ${input[1]} is not a valid number`);
+        continue;
+      }
+      for (let i = 0; i < num; i++) {
+        await publishGameLog(channel, gameState.getUsername(),  getMaliciousLog());
+      }
+      console.log(`Published ${num} malicious logs`);
     } else if (input[0] === "quit") {
       printQuit()
       process.exit(0);
@@ -84,7 +101,7 @@ function runFunction(gameState: GameState, input: string[], operation: (gameStat
   }
 }
 
-export function publishGameLog(ch: ConfirmChannel, username: string, msg: string) {
+export async function publishGameLog(ch: ConfirmChannel, username: string, msg: string) {
   const currentTime: Date = new Date();
   const gameLog: GameLog = { username: username, message: msg, currentTime: currentTime };
   publishMsgPack(ch, ExchangePerilTopic, `${GameLogSlug}.${username}`, gameLog);

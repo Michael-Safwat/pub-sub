@@ -46,6 +46,7 @@ export async function subscribe<T>(
     routingKey,
     queueType,
   );
+  await ch.prefetch(10);
 
   await ch.consume(
     queue.queue,
